@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="24dp" android:background="?attr/colorSurface">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="48dp" android:text="@string/app_name"
+        android:textAppearance="?attr/textAppearanceHeadlineLarge" android:textColor="?attr/colorOnSurface" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="8dp" android:layout_marginBottom="32dp" android:text="@string/setup_desc"
+        android:textAppearance="?attr/textAppearanceBodyLarge" android:textColor="?attr/colorOnSurfaceVariant" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/enable"
+        android:layout_width="match_parent" android:layout_height="64dp" android:text="@string/step1" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/choose"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent" android:layout_height="64dp"
+        android:layout_marginTop="12dp" android:text="@string/step2" />
+    <EditText android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="32dp" android:minHeight="56dp" android:hint="@string/test"
+        android:background="@drawable/bg_field" android:paddingHorizontal="20dp"
+        android:textColor="?attr/colorOnSurface" android:textColorHint="?attr/colorOnSurfaceVariant" />
+</LinearLayout>

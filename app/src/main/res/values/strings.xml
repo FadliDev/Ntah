@@ -1,10 +1,7 @@
 <resources>
-    <string name="app_name">Sally Home</string>
-    <string name="search">Cari aplikasi</string>
-    <string name="apps">Semua aplikasi</string>
-    <string name="wallpaper">Ganti wallpaper</string>
-    <string name="pin">Sematkan ke dock</string>
-    <string name="unpin">Lepas dari dock</string>
-    <string name="app_info">Info aplikasi</string>
-    <string name="uninstall">Copot pemasangan</string>
+    <string name="app_name">Sally Keyboard</string>
+    <string name="setup_desc">Aktifkan dulu, lalu pilih sebagai keyboard utama.</string>
+    <string name="step1">1. Aktifkan keyboard</string>
+    <string name="step2">2. Pilih keyboard</string>
+    <string name="test">Coba ketik di sini</string>
 </resources>
