@@ -37,6 +37,8 @@ class MainActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var controller: Any? = null
     @Volatile private var finished = true
+    @Volatile private var lastVariant = 'A'
+    private var t0 = 0L
 
     private val permListener = Shizuku.OnRequestPermissionResultListener { _, r ->
         log("Izin Shizuku: " + if (r == PackageManager.PERMISSION_GRANTED) "GRANTED" else "DENIED")
@@ -70,11 +72,13 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 48, 24, 24) }
         val b1 = Button(this).apply { text = "1. Minta izin Shizuku" }
-        val b2 = Button(this).apply { text = "2. Tes sekarang (app ini dianimasikan)" }
-        val b3 = Button(this).apply { text = "3. Tes 5 detik lagi (pindah ke app lain)" }
+        val b2 = Button(this).apply { text = "2A. Tes: intent RecentsActivity (varian lama)" }
+        val b2b = Button(this).apply { text = "2B. Tes: intent HOME + package launcher" }
+        val b2c = Button(this).apply { text = "2C. Tes: intent HOME default (tanpa component)" }
+        val b3 = Button(this).apply { text = "3. Tes 5 detik lagi (varian terakhir, pindah app)" }
         val b4 = Button(this).apply { text = "DARURAT: cancel recents animation" }
         out = TextView(this).apply { textSize = 12f; setTextIsSelectable(true) }
-        listOf(b1, b2, b3, b4).forEach { root.addView(it) }
+        listOf(b1, b2, b2b, b2c, b3, b4).forEach { root.addView(it) }
         root.addView(ScrollView(this).apply { addView(out) })
         setContentView(root)
 
@@ -85,8 +89,10 @@ class MainActivity : AppCompatActivity() {
             else if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) log("Izin sudah ada.")
             else Shizuku.requestPermission(1)
         }
-        b2.setOnClickListener { startTest(0) }
-        b3.setOnClickListener { startTest(5000) }
+        b2.setOnClickListener { lastVariant = 'A'; startTest(0, 'A') }
+        b2b.setOnClickListener { lastVariant = 'B'; startTest(0, 'B') }
+        b2c.setOnClickListener { lastVariant = 'C'; startTest(0, 'C') }
+        b3.setOnClickListener { startTest(5000, lastVariant) }
         b4.setOnClickListener {
             Thread {
                 try {
@@ -117,7 +123,7 @@ class MainActivity : AppCompatActivity() {
             .getMethod("asInterface", IBinder::class.java).invoke(null, b)!!
     }
 
-    private fun startTest(delayMs: Long) {
+    private fun startTest(delayMs: Long, variant: Char) {
         Thread {
             runOnUiThread { out.text = "" }
             if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
@@ -131,8 +137,19 @@ class MainActivity : AppCompatActivity() {
                 val id = resources.getIdentifier("config_recentsComponentName", "string", "android")
                 val comp = ComponentName.unflattenFromString(android.content.res.Resources.getSystem().getString(id))
                     ?: run { log("[X] recents component tidak ketemu"); return@Thread }
-                val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_DEFAULT)
-                    .setComponent(comp).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val intent = when (variant) {
+                    // A: persis seperti tes sebelumnya
+                    'A' -> Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_DEFAULT)
+                        .setComponent(comp).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // B: seperti mMyHomeIntent di OverviewComponentObserver (Launcher3 Quickstep)
+                    'B' -> Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                        .setPackage(comp.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // C: home default sistem
+                    else -> Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                log("VARIAN $variant intent = $intent")
+                t0 = System.currentTimeMillis()
 
                 val ifaceCls = Class.forName(DESC_RUNNER)
                 val proxy = Proxy.newProxyInstance(
@@ -166,7 +183,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onAnimationStart(data: Parcel) {
+        log("[t+${System.currentTimeMillis() - t0}ms] onAnimationStart: parcel size=${data.dataSize()} pos=${data.dataPosition()}")
         val ctrlBinder = data.readStrongBinder()
+        run {
+            val pos = data.dataPosition()
+            val n = data.readInt()
+            data.setDataPosition(pos)
+            log("array length mentah = $n (−1 = null), sisa parcel = ${data.dataAvail()} byte")
+        }
         val rat = Class.forName("android.view.RemoteAnimationTarget")
         @Suppress("UNCHECKED_CAST")
         val creator = rat.getField("CREATOR").get(null) as Parcelable.Creator<Parcelable>
@@ -178,11 +202,14 @@ class MainActivity : AppCompatActivity() {
         finished = false
 
         val sb = StringBuilder("CALLBACK onAnimationStart: ${apps.size} target\n")
+        if (apps.isEmpty()) sb.append("[!] 0 target: sistem tidak memberi leash. Tidak ada yang bisa dianimasikan.\n")
         for (t in apps) {
             val c = t.javaClass
             val pos = c.getField("position").get(t) as Point
             val bounds = c.getField("sourceContainerBounds").get(t) as Rect
-            sb.append("  task=${c.getField("taskId").getInt(t)} mode=${c.getField("mode").getInt(t)} pos=${pos.x},${pos.y} bounds=${bounds.toShortString()}\n")
+            sb.append("  task=${c.getField("taskId").getInt(t)} mode=${c.getField("mode").getInt(t)} pos=${pos.x},${pos.y} bounds=${bounds.toShortString()}")
+            runCatching { sb.append(" translucent=${c.getField("isTranslucent").getBoolean(t)}") }
+            sb.append("\n")
         }
         sb.append("controller methods: " + Class.forName("android.view.IRecentsAnimationController").methods.map { it.name }.distinct().joinToString())
         log(sb.toString())
@@ -242,8 +269,10 @@ class MainActivity : AppCompatActivity() {
             try {
                 val m = Class.forName("android.view.IRecentsAnimationController").methods.first { it.name == "finish" }
                 val args = Array<Any?>(m.parameterCount) { true }
+                log("[t+${System.currentTimeMillis() - t0}ms] memanggil finish(${m.parameterTypes.joinToString { it.simpleName }}) alasan: $why")
+                val a = System.currentTimeMillis()
                 m.invoke(c, *args)
-                log("[OK] finish() dipanggil ($why)")
+                log("[OK] finish() kembali setelah ${System.currentTimeMillis() - a}ms")
             } catch (e: Throwable) { log("[X] finish: ${unwrap(e)}") }
             controller = null
         }.start()
