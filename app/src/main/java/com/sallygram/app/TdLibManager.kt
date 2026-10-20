@@ -71,25 +71,26 @@ class TdLibManager(context: Context) {
             is TdApi.UpdateAuthorizationState -> {
                 when (val auth = update.authorizationState) {
                     is TdApi.AuthorizationStateWaitTdlibParameters -> {
+                        val databaseDirectory = appContext.filesDir.resolve("tdlib-db").absolutePath
+                        val filesDirectory = appContext.filesDir.resolve("tdlib-files").absolutePath
                         val parameters = TdApi.SetTdlibParameters(
-                            appContext.filesDir.resolve("tdlib").absolutePath,
-                            true,
-                            false,
+                            false, // useTestDc
+                            databaseDirectory,
+                            filesDirectory,
+                            ByteArray(0), // databaseEncryptionKey
+                            true, // useFileDatabase
+                            true, // useChatInfoDatabase
+                            true, // useMessageDatabase
+                            true, // useSecretChats
                             BuildConfig.TELEGRAM_API_ID,
                             BuildConfig.TELEGRAM_API_HASH,
                             "id",
                             android.os.Build.MODEL ?: "Android",
                             android.os.Build.VERSION.RELEASE ?: "Android",
-                            BuildConfig.VERSION_NAME,
-                            true,
-                            false
+                            BuildConfig.VERSION_NAME
                         )
                         send(parameters)
                         setState("Menginisialisasi database Telegram…", LoginStep.NONE)
-                    }
-                    is TdApi.AuthorizationStateWaitEncryptionKey -> {
-                        send(TdApi.CheckDatabaseEncryptionKey(""))
-                        setState("Membuka database Telegram…", LoginStep.NONE)
                     }
                     is TdApi.AuthorizationStateWaitPhoneNumber ->
                         setState("Masukkan nomor telepon akun Telegram.", LoginStep.PHONE)
@@ -211,7 +212,10 @@ class TdLibManager(context: Context) {
         setState("Memeriksa kata sandi…", LoginStep.NONE)
     }
 
-    private fun send(function: TdApi.Function, onResult: ((TdApi.Object) -> Unit)? = null) {
+    private fun <T : TdApi.Object> send(
+        function: TdApi.Function<T>,
+        onResult: ((T) -> Unit)? = null
+    ) {
         val activeClient = client ?: return
         activeClient.send(function) { result ->
             onResult?.invoke(result)
