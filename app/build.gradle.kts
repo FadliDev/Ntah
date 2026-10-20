@@ -18,6 +18,18 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    val telegramApiId = (providers.gradleProperty("telegramApiId")
+        .orElse(providers.environmentVariable("TELEGRAM_API_ID")).orElse("0").get())
+        .toIntOrNull() ?: 0
+    val telegramApiHash = providers.gradleProperty("telegramApiHash")
+        .orElse(providers.environmentVariable("TELEGRAM_API_HASH")).orElse("").get()
+        .replace("\\", "\\\\").replace("\"", "\\\"")
+    defaultConfig {
+        buildConfigField("int", "TELEGRAM_API_ID", telegramApiId.toString())
+        buildConfigField("String", "TELEGRAM_API_HASH", "\"$telegramApiHash\"")
     }
 
     compileOptions {

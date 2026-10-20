@@ -50,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,14 +82,23 @@ private val demoChats = listOf(
 )
 
 class MainActivity : ComponentActivity() {
+    private lateinit var tdLibManager: TdLibManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { SallygramApp() }
+        tdLibManager = TdLibManager(applicationContext)
+        tdLibManager.start()
+        setContent { SallygramApp(tdLibManager) }
+    }
+
+    override fun onDestroy() {
+        tdLibManager.close()
+        super.onDestroy()
     }
 }
 
 @Composable
-private fun SallygramApp() {
+private fun SallygramApp(tdLibManager: TdLibManager) {
     var dark by remember { mutableStateOf(false) }
     MaterialTheme(
         colorScheme = if (dark) darkColorScheme(
@@ -105,18 +115,22 @@ private fun SallygramApp() {
     ) {
         ChatHome(
             onToggleTheme = { dark = !dark },
-            dark = dark
+            dark = dark,
+            tdLibManager = tdLibManager
         )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean) {
+private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean, tdLibManager: TdLibManager) {
     var query by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
     var showNewChat by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
+    var showLogin by remember { mutableStateOf(false) }
+    var loginInput by remember { mutableStateOf("") }
+    val tdState by tdLibManager.state.collectAsState()
     val filtered = demoChats.filter {
         it.name.contains(query, ignoreCase = true) ||
             it.message.contains(query, ignoreCase = true)
@@ -209,7 +223,8 @@ private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp)
+                        .clickable { showLogin = true },
                     shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
@@ -221,11 +236,18 @@ private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean) {
                         Icon(Icons.Default.Send, contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer)
                         Column {
-                            Text("Klien Telegram", fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("UI demo — belum terhubung ke akun Telegram",
+                            Text(
+                                if (tdState.isReady) "Telegram terhubung" else "Koneksi Telegram · TDLib",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                tdState.status,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
@@ -258,6 +280,67 @@ private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean) {
         }
     }
 
+    if (showLogin) {
+        val step = tdState.step
+        val canSubmit = step == TdLibManager.LoginStep.PHONE ||
+            step == TdLibManager.LoginStep.CODE || step == TdLibManager.LoginStep.PASSWORD
+        val title = when (step) {
+            TdLibManager.LoginStep.PHONE -> "Login Telegram"
+            TdLibManager.LoginStep.CODE -> "Kode verifikasi"
+            TdLibManager.LoginStep.PASSWORD -> "Verifikasi dua langkah"
+            TdLibManager.LoginStep.CONFIGURATION -> "Konfigurasi TDLib"
+            TdLibManager.LoginStep.READY -> "Akun terhubung"
+            else -> "Status Telegram"
+        }
+        AlertDialog(
+            onDismissRequest = { showLogin = false; loginInput = "" },
+            title = { Text(title) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(tdState.status)
+                    if (canSubmit) {
+                        OutlinedTextField(
+                            value = loginInput,
+                            onValueChange = { loginInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = {
+                                Text(when (step) {
+                                    TdLibManager.LoginStep.PHONE -> "Nomor telepon (+62…)"
+                                    TdLibManager.LoginStep.CODE -> "Kode login"
+                                    else -> "Kata sandi Telegram"
+                                })
+                            }
+                        )
+                    }
+                    if (step == TdLibManager.LoginStep.CONFIGURATION) {
+                        Text("Tambahkan TELEGRAM_API_ID dan TELEGRAM_API_HASH ke GitHub Actions Secrets, lalu build ulang. Dapatkan kredensial aplikasi di my.telegram.org.")
+                    }
+                    if (step == TdLibManager.LoginStep.REGISTRATION) {
+                        Text("Akun baru belum didukung pada tahap ini. Gunakan akun Telegram yang sudah terdaftar.")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (step) {
+                        TdLibManager.LoginStep.PHONE -> tdLibManager.submitPhone(loginInput)
+                        TdLibManager.LoginStep.CODE -> tdLibManager.submitCode(loginInput)
+                        TdLibManager.LoginStep.PASSWORD -> tdLibManager.submitPassword(loginInput)
+                        else -> { }
+                    }
+                    loginInput = ""
+                    if (!canSubmit) showLogin = false
+                }, enabled = !canSubmit || loginInput.isNotBlank()) {
+                    Text(if (canSubmit) "Kirim" else "Tutup")
+                }
+            },
+            dismissButton = {
+                if (canSubmit) TextButton(onClick = { showLogin = false; loginInput = "" }) { Text("Batal") }
+            }
+        )
+    }
+
     if (showNewChat) {
         AlertDialog(
             onDismissRequest = { showNewChat = false },
@@ -272,7 +355,7 @@ private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean) {
         AlertDialog(
             onDismissRequest = { showInfo = false },
             title = { Text("Tentang Sallygram") },
-            text = { Text("Sallygram 0.1.0\nKerangka klien Telegram dengan Kotlin, AndroidX, dan Material Design 3. Data chat saat ini hanya contoh lokal.") },
+            text = { Text("Sallygram 0.1.0\nKotlin, AndroidX, Material Design 3, dan TDLib. Integrasi autentikasi sedang disiapkan; daftar chat masih berupa data demo.") },
             confirmButton = {
                 TextButton(onClick = { showInfo = false }) { Text("Tutup") }
             }

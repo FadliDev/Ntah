@@ -1,41 +1,36 @@
-# Sallygram
+# Sallygram — TDLib integration starter
 
-Kerangka awal aplikasi klien Telegram Android menggunakan Kotlin, AndroidX, Jetpack Compose, dan Material Design 3.
+Sallygram is an Android Telegram-client starter built with Kotlin, AndroidX, Jetpack Compose, Material Design 3, and the official TDLib Java/JNI interface.
 
-## Status saat ini
+## Current implementation
 
-- UI awal daftar chat, pencarian lokal, navigasi Chat/Panggilan/Kontak/Setelan.
-- Tema terang dan gelap.
-- Data chat adalah data demo lokal.
-- Belum login Telegram, belum mengirim pesan, dan belum sinkron dengan akun Telegram.
+- Initial Compose/Material 3 UI and demo chat list.
+- TDLib client initialization and authorization-state handling.
+- Login flow UI for phone number, login code, and two-step verification password.
+- GitHub Actions workflow builds TDLib for Android using the upstream TDLib Android scripts, stages generated Java bindings/native libraries, and then builds the debug APK.
 
-## Build APK melalui GitHub Actions
+**Important:** The visible chat list, contacts, and calls are still demo placeholders. Successful login does not yet populate real chats or send messages; those features need to be connected to TDLib chat/message updates in the next implementation stage. A TDLib build has not been executed in this environment, so verify the first GitHub Actions run before treating the APK as release-ready.
 
-1. Buat repository GitHub dan upload/push seluruh isi proyek ini.
-2. Buka tab **Actions** dan aktifkan workflow bila diminta.
-3. Jalankan workflow **Build Sallygram APK** atau push commit ke `main`/`master`.
-4. Buka hasil run workflow dan unduh artifact **Sallygram-debug**.
-5. Ekstrak ZIP artifact untuk mendapatkan APK debug.
+## Configure Telegram API credentials
 
-## Build lokal
+1. Register an application at https://my.telegram.org and obtain `api_id` and `api_hash`.
+2. In your GitHub repository, open **Settings → Secrets and variables → Actions**.
+3. Add repository secrets named `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`.
+4. Run the **Build Sallygram APK** workflow again.
 
-Butuh JDK 17, Android SDK Platform 35, dan Gradle wrapper yang valid:
+The workflow reads those secrets as environment variables. If they are absent, the app still builds but displays a configuration message and cannot start Telegram authorization. Do not commit your API hash or account credentials to source control.
 
-```bash
-./gradlew assembleDebug
-```
+For local builds, set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` in the shell environment before running `./gradlew assembleDebug`. The `scripts/prepare-tdlib.sh` script must also be run first to generate/stage TDLib's Java bindings and native libraries.
 
-APK debug akan berada di `app/build/outputs/apk/debug/app-debug.apk`.
+## Build APK with GitHub Actions
 
-## Langkah berikutnya
+1. Push this project to a GitHub repository.
+2. Add the optional Telegram API secrets described above.
+3. Open **Actions → Build Sallygram APK** and run the workflow, or push to `main`/`master`.
+4. Download the **Sallygram-debug** artifact from the workflow run and extract the APK.
 
-Integrasi akun Telegram memerlukan Telegram API (`api_id` dan `api_hash`) dan implementasi protokol melalui TDLib atau solusi klien yang sesuai. Jangan menaruh kredensial rahasia di repository publik. Untuk distribusi, konfigurasi signing release dengan GitHub Actions Secrets.
+The workflow builds TDLib from the official upstream repository. This native build can take several minutes and may need maintenance if upstream build scripts or Android toolchain versions change.
 
-## Teknologi
+## License and upstream
 
-- Kotlin
-- AndroidX
-- Jetpack Compose
-- Material 3
-- Gradle Kotlin DSL
-- GitHub Actions
+TDLib is maintained by Telegram. Review its current license and terms at https://github.com/tdlib/td before distributing a derivative application.
