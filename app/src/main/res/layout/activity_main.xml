@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <LinearLayout android:id="@+id/home" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical" android:paddingHorizontal="16dp">
+        <TextClock android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="12dp" android:layout_marginTop="56dp"
+            android:format12Hour="h:mm" android:format24Hour="HH:mm"
+            android:textColor="#FFFFFF" android:textSize="88sp" android:fontFamily="sans-serif-light"
+            android:shadowColor="#66000000" android:shadowRadius="12" />
+        <TextClock android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="16dp" android:format12Hour="EEEE, d MMMM" android:format24Hour="EEEE, d MMMM"
+            android:textColor="#FFFFFF" android:textSize="18sp"
+            android:shadowColor="#66000000" android:shadowRadius="8" />
+        <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/dock"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" android:background="@drawable/bg_dock"
+            android:padding="8dp" android:minHeight="88dp" />
+        <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/fab"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal" android:layout_marginBottom="12dp"
+            android:contentDescription="@string/apps" android:src="@drawable/ic_apps" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/drawer" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical" android:visibility="invisible" android:background="@drawable/bg_drawer">
+        <View android:layout_width="32dp" android:layout_height="4dp" android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp" android:background="@drawable/bg_handle" />
+        <EditText android:id="@+id/search" android:layout_width="match_parent" android:layout_height="56dp"
+            android:layout_margin="16dp" android:background="@drawable/bg_search"
+            android:drawableStart="@drawable/ic_search" android:drawablePadding="12dp" android:paddingHorizontal="20dp"
+            android:hint="@string/search" android:imeOptions="actionSearch" android:inputType="text"
+            android:maxLines="1" android:textColor="?attr/colorOnSurface" android:textColorHint="?attr/colorOnSurfaceVariant"
+            android:importantForAutofill="no" />
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/apps"
+            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+            android:clipToPadding="false" android:paddingHorizontal="8dp" android:paddingBottom="24dp" />
+    </LinearLayout>
+</FrameLayout>

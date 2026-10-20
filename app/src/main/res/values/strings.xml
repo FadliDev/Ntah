@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Sally Home</string>
+    <string name="search">Cari aplikasi</string>
+    <string name="apps">Semua aplikasi</string>
+    <string name="wallpaper">Ganti wallpaper</string>
+    <string name="pin">Sematkan ke dock</string>
+    <string name="unpin">Lepas dari dock</string>
+    <string name="app_info">Info aplikasi</string>
+    <string name="uninstall">Copot pemasangan</string>
+</resources>
