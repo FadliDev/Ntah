@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.sally.recentstest"
+    namespace = "com.sally.recentstest2"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.sally.recentstest"
+        applicationId = "com.sally.recentstest2"
         minSdk = 29
         targetSdk = 29
         versionCode = 1
