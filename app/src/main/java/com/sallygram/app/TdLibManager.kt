@@ -144,9 +144,9 @@ class TdLibManager(context: Context) {
 
     private fun requestChats() {
         // Load the main chat list first; then ask TDLib for its chat IDs.
-        send(TdApi.LoadChats(TdApi.ChatListMain(), 100)) { result ->
+        send(TdApi.LoadChats(TdApi.ChatListMain(), 30)) { result ->
             if (result is TdApi.Ok) {
-                send(TdApi.GetChats(TdApi.ChatListMain(), 100)) { chatsResult ->
+                send(TdApi.GetChats(TdApi.ChatListMain(), 30)) { chatsResult ->
                     if (chatsResult is TdApi.Chats) {
                         chatsResult.chatIds.forEach { chatId -> requestChat(chatId) }
                     } else if (chatsResult is TdApi.Error) {

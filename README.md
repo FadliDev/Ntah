@@ -1,26 +1,23 @@
-# Sallygram real Telegram chat-list patch
+# Sallygram performance + persistent signing patch
 
-This patch adds the first live Telegram feature: loading the user's main chat list through TDLib after authorization, and showing real chat titles, last-message previews, timestamps, and unread counts in the existing Compose list.
+Contains:
+- `.github/workflows/build.yml`: copies the persistent keystore to `$HOME/.android/debug.keystore` before `assembleDebug`.
+- `signing/sallygram-debug.keystore`: stable debug signing identity for this private repository.
+- `app/src/main/java/com/sallygram/app/TdLibManager.kt`: initially loads 30 chats rather than 100 to reduce initial loading work.
 
-## Files
-- `app/src/main/java/com/sallygram/app/TdLibManager.kt` — replace the existing file.
-- `MainActivity.patch` — apply this small change to `app/src/main/java/com/sallygram/app/MainActivity.kt`.
+## Apply
+Extract the ZIP into the repository root, replacing the listed files. Keep this repository private and do not share the keystore or this ZIP publicly.
 
-## Apply in Termux
-Extract the ZIP into the repository root, then run:
-
+Then run:
 ```bash
-cp app/src/main/java/com/sallygram/app/TdLibManager.kt ~/RecentTask/app/src/main/java/com/sallygram/app/TdLibManager.kt
-cd ~/RecentTask
-git apply /path/to/MainActivity.patch
-git add app/src/main/java/com/sallygram/app/TdLibManager.kt app/src/main/java/com/sallygram/app/MainActivity.kt
-git commit -m "Load real Telegram chats through TDLib"
+git add .github/workflows/build.yml signing/sallygram-debug.keystore app/src/main/java/com/sallygram/app/TdLibManager.kt
+git commit -m "Speed up initial chat loading and persist APK signing key"
 git push origin main
 ```
 
-If you extracted directly into `~/RecentTask`, the first `cp` is unnecessary and run `git apply MainActivity.patch`.
+## Important signing note
+The keystore uses alias `androiddebugkey` and password `android` for Android's debug signing configuration. This is intended for personal sideloaded debug APKs. Do not use this debug key for Google Play production releases.
 
-Notes:
-- Requires a successful TDLib login and configured `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`.
-- This stage syncs the real chat list only. Opening a conversation and sending/receiving message history is the next feature.
-- The patch is based on the public source files currently visible in `FadliDev/Ntah`. A full GitHub Actions build has not been run from this environment; check the next Actions run for API compatibility errors.
+Your already-installed APK may have been signed with a different ephemeral runner key. The first install using this new key may require uninstalling the old APK first (which deletes local app data); after that, future builds using this same key should install as updates as long as `applicationId` remains unchanged.
+
+The keystore is included because the repository is private as requested, but anyone who obtains this file can sign builds as this app. Keep repository access restricted and retain a secure backup.

@@ -28,6 +28,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Do not request the obsolete "tools" SDK package. It was removed
+      # from Google's current SDK repository and makes setup-android fail.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -53,59 +55,28 @@ jobs:
           test -f ./scripts/prepare-tdlib.sh || { echo "::error::scripts/prepare-tdlib.sh missing"; exit 1; }
           test -f ./app/build.gradle.kts || { echo "::error::app/build.gradle.kts missing"; exit 1; }
 
-      # Restore TDLib sources/build intermediates and generated outputs.
-      - name: Restore TDLib cache
-        id: tdlib-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            tdlib/
-            app/src/main/jniLibs/
-            app/src/main/java/org/drinkless/tdlib/
-            .tdlib-build/
-          key: tdlib-${{ runner.os }}-android35-${{ hashFiles('scripts/prepare-tdlib.sh') }}
-          restore-keys: |
-            tdlib-${{ runner.os }}-android35-
-
-      # Exact cache hit means native libraries were already built by a successful
-      # run with the same preparation script, so skip the expensive native compile.
-      # On a partial/old cache restore, rerun the script so it can reuse intermediates.
       - name: Build TDLib for Android
-        if: steps.tdlib-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          set -euo pipefail
           chmod +x ./scripts/prepare-tdlib.sh
           ./scripts/prepare-tdlib.sh
 
-      - name: Verify cached or built TDLib outputs
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Keep the same signing identity across fresh GitHub-hosted runners.
+      # The private repository contains signing/sallygram-debug.keystore.
+      - name: Install persistent Sallygram debug signing key
         shell: bash
         run: |
           set -euo pipefail
-          if ! find app/src/main/jniLibs tdlib .tdlib-build -type f -name '*.so' -print -quit 2>/dev/null | grep -q .; then
-            echo "::error::No TDLib native .so output found in expected output/cache directories."
-            echo "Inspect scripts/prepare-tdlib.sh and add its actual output directory to the cache paths."
+          mkdir -p "$HOME/.android"
+          test -f signing/sallygram-debug.keystore || {
+            echo "::error::signing/sallygram-debug.keystore is missing"
             exit 1
-          fi
-          if ! find app/src/main/java tdlib .tdlib-build -type f -name 'TdApi.java' -print -quit 2>/dev/null | grep -q .; then
-            echo "::warning::TdApi.java was not found in common paths; continuing because this project may provide the binding differently."
-          fi
-
-      # Save before Gradle. This preserves the expensive native build even if the
-      # Kotlin/Gradle APK step fails later in the same workflow.
-      - name: Save TDLib cache
-        if: success() && steps.tdlib-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            tdlib/
-            app/src/main/jniLibs/
-            app/src/main/java/org/drinkless/tdlib/
-            .tdlib-build/
-          key: tdlib-${{ runner.os }}-android35-${{ hashFiles('scripts/prepare-tdlib.sh') }}
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+          }
+          cp signing/sallygram-debug.keystore "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
 
       - name: Build debug APK
         shell: bash
