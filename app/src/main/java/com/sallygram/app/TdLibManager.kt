@@ -1,6 +1,7 @@
 package com.sallygram.app
 
 import android.content.Context
+import android.os.Build
 import com.sallygram.app.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +35,6 @@ class TdLibManager(context: Context) {
             )
             return
         }
-
         try {
             client = Client.create(
                 { update -> handleUpdate(update) },
@@ -53,44 +53,44 @@ class TdLibManager(context: Context) {
     }
 
     private fun handleUpdate(update: TdApi.Object) {
-        if (update is TdApi.UpdateAuthorizationState) {
-            when (val auth = update.authorizationState) {
-                is TdApi.AuthorizationStateWaitTdlibParameters -> {
-                    val parameters = TdApi.SetTdlibParameters(
-                        appContext.filesDir.resolve("tdlib").absolutePath,
-                        true,
-                        false,
-                        BuildConfig.TELEGRAM_API_ID,
-                        BuildConfig.TELEGRAM_API_HASH,
-                        "id",
-                        android.os.Build.MODEL ?: "Android",
-                        android.os.Build.VERSION.RELEASE ?: "Android",
-                        BuildConfig.VERSION_NAME,
-                        true,
-                        false
-                    )
-                    send(parameters)
-                    setState("Menginisialisasi database Telegram…", LoginStep.NONE)
-                }
-                is TdApi.AuthorizationStateWaitEncryptionKey -> {
-                    send(TdApi.CheckDatabaseEncryptionKey(""))
-                    setState("Membuka database Telegram…", LoginStep.NONE)
-                }
-                is TdApi.AuthorizationStateWaitPhoneNumber ->
-                    setState("Masukkan nomor telepon akun Telegram.", LoginStep.PHONE)
-                is TdApi.AuthorizationStateWaitCode ->
-                    setState("Masukkan kode login Telegram yang dikirim ke perangkat atau aplikasi Telegram.", LoginStep.CODE)
-                is TdApi.AuthorizationStateWaitPassword ->
-                    setState("Akun ini memakai verifikasi dua langkah. Masukkan kata sandi Telegram.", LoginStep.PASSWORD)
-                is TdApi.AuthorizationStateWaitRegistration ->
-                    setState("Akun perlu didaftarkan. Form nama akan ditambahkan pada tahap berikutnya.", LoginStep.REGISTRATION)
-                is TdApi.AuthorizationStateReady ->
-                    mutableState.value = UiState("Terhubung ke Telegram", LoginStep.READY, true)
-                is TdApi.AuthorizationStateLoggingOut -> setState("Keluar dari akun Telegram…", LoginStep.NONE)
-                is TdApi.AuthorizationStateClosing -> setState("Menutup koneksi Telegram…", LoginStep.NONE)
-                is TdApi.AuthorizationStateClosed -> setState("Koneksi TDLib ditutup.", LoginStep.NONE)
-                else -> setState("Menunggu status otorisasi Telegram…", LoginStep.NONE)
+        if (update !is TdApi.UpdateAuthorizationState) return
+        when (val auth = update.authorizationState) {
+            is TdApi.AuthorizationStateWaitTdlibParameters -> {
+                val directory = appContext.filesDir.resolve("tdlib").apply { mkdirs() }
+                val filesDirectory = directory.resolve("files").apply { mkdirs() }
+                val parameters = TdApi.SetTdlibParameters(
+                    false, // useTestDc
+                    directory.absolutePath,
+                    filesDirectory.absolutePath,
+                    ByteArray(0), // databaseEncryptionKey; empty means no database encryption
+                    true, // useFileDatabase
+                    true, // useChatInfoDatabase
+                    true, // useMessageDatabase
+                    true, // useSecretChats
+                    BuildConfig.TELEGRAM_API_ID,
+                    BuildConfig.TELEGRAM_API_HASH,
+                    "id",
+                    Build.MODEL ?: "Android",
+                    Build.VERSION.RELEASE ?: "Android",
+                    BuildConfig.VERSION_NAME
+                )
+                send(parameters)
+                setState("Menginisialisasi database Telegram…", LoginStep.NONE)
             }
+            is TdApi.AuthorizationStateWaitPhoneNumber ->
+                setState("Masukkan nomor telepon akun Telegram.", LoginStep.PHONE)
+            is TdApi.AuthorizationStateWaitCode ->
+                setState("Masukkan kode login Telegram yang dikirim ke perangkat atau aplikasi Telegram.", LoginStep.CODE)
+            is TdApi.AuthorizationStateWaitPassword ->
+                setState("Akun ini memakai verifikasi dua langkah. Masukkan kata sandi Telegram.", LoginStep.PASSWORD)
+            is TdApi.AuthorizationStateWaitRegistration ->
+                setState("Akun perlu didaftarkan. Form nama akan ditambahkan pada tahap berikutnya.", LoginStep.REGISTRATION)
+            is TdApi.AuthorizationStateReady ->
+                mutableState.value = UiState("Terhubung ke Telegram", LoginStep.READY, true)
+            is TdApi.AuthorizationStateLoggingOut -> setState("Keluar dari akun Telegram…", LoginStep.NONE)
+            is TdApi.AuthorizationStateClosing -> setState("Menutup koneksi Telegram…", LoginStep.NONE)
+            is TdApi.AuthorizationStateClosed -> setState("Koneksi TDLib ditutup.", LoginStep.NONE)
+            else -> setState("Menunggu status otorisasi Telegram…", LoginStep.NONE)
         }
     }
 
@@ -112,7 +112,7 @@ class TdLibManager(context: Context) {
         setState("Memeriksa kata sandi…", LoginStep.NONE)
     }
 
-    private fun send(function: TdApi.Function) {
+    private fun send(function: TdApi.Function<*>) {
         val activeClient = client ?: return
         activeClient.send(function) { result ->
             if (result is TdApi.Error) {
