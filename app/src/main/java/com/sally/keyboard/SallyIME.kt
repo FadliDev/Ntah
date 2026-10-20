@@ -6,12 +6,15 @@ import android.view.ContextThemeWrapper
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import com.google.android.material.color.DynamicColors
 
 class SallyIME : InputMethodService(), SallyKeyboardView.Listener {
     private lateinit var kb: SallyKeyboardView
 
     override fun onCreateInputView(): View {
-        kb = SallyKeyboardView(ContextThemeWrapper(this, R.style.Theme_Keyboard), this)
+        // Material You: warna ikut wallpaper (Android 12+), fallback ke tema statis
+        val themed = DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(this, R.style.Theme_Keyboard))
+        kb = SallyKeyboardView(themed, this)
         return kb
     }
 
@@ -20,6 +23,7 @@ class SallyIME : InputMethodService(), SallyKeyboardView.Listener {
         val caps = info.inputType and InputType.TYPE_TEXT_FLAG_CAP_SENTENCES != 0 ||
                 info.inputType and InputType.TYPE_TEXT_FLAG_CAP_WORDS != 0
         kb.setShift(if (caps) 1 else 0)
+        kb.setSuggestionsEnabled(wantsSuggestions(info))
         updateSuggestions()
     }
 
@@ -56,9 +60,30 @@ class SallyIME : InputMethodService(), SallyKeyboardView.Listener {
 
     private fun prefix() = (currentInputConnection?.getTextBeforeCursor(24, 0)?.toString() ?: "").takeLastWhile { it.isLetter() }
 
+    /** Bar saran hanya untuk field teks biasa; password, email, URL, angka, dll disembunyikan. */
+    private fun wantsSuggestions(info: EditorInfo): Boolean {
+        val type = info.inputType
+        if (type and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return false
+        if (type and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0) return false
+        return when (type and InputType.TYPE_MASK_VARIATION) {
+            InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_URI -> false
+            else -> true
+        }
+    }
+
     private fun updateSuggestions() {
         if (!::kb.isInitialized) return
         val p = prefix()
-        kb.setSuggestions(if (p.isEmpty()) emptyList() else Native.suggest(p.lowercase()).toList())
+        kb.setSuggestions(
+            if (p.isEmpty()) {
+                // Belum mengetik: tampilkan kata pembuka supaya bar tidak kosong / tidak melompat
+                val starters = listOf("saya", "yang", "terima kasih")
+                if (kb.shiftState() > 0) starters.map { it.replaceFirstChar { c -> c.uppercase() } } else starters
+            } else Native.suggest(p.lowercase()).toList()
+        )
     }
 }

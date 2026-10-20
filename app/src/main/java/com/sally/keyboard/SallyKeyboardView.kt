@@ -2,10 +2,12 @@ package com.sally.keyboard
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -14,10 +16,19 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.R as M
 
-/** Keyboard QWERTY gaya Material 3: tombol tonal, pill saran, sudut membulat. */
+/**
+ * Keyboard QWERTY gaya Material 3 yang adaptif:
+ * - tinggi tombol & ukuran teks menyesuaikan layar / orientasi
+ * - lebar dibatasi di layar lebar (tablet / foldable / landscape)
+ * - padding bawah mengikuti navigation bar (gesture / 3-button)
+ * - warna ikut Material You (lewat context dari SallyIME)
+ * - bar saran bisa disembunyikan untuk field yang tidak butuh (password, angka, dll)
+ */
 class SallyKeyboardView(ctx: Context, private val l: Listener) : LinearLayout(ctx) {
     interface Listener { fun onText(t: String); fun onDelete(); fun onEnter(); fun onSuggestion(w: String) }
 
@@ -27,27 +38,81 @@ class SallyKeyboardView(ctx: Context, private val l: Listener) : LinearLayout(ct
     private val syms = arrayOf("1234567890", "@#$%&-+()", "!\"'.:;/?")
     private val handler = Handler(Looper.getMainLooper())
     private val suggViews = List(3) { TextView(ctx) }
+    private val bar = LinearLayout(ctx).apply { orientation = HORIZONTAL }
     private val keys = LinearLayout(ctx).apply { orientation = VERTICAL }
+
+    private var keyH = 0             // px
+    private var navInset = 0         // px
+    private val maxContentW get() = dp(720)
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun c(attr: Int) = MaterialColors.getColor(this, attr)
 
+    private fun computeKeyH(): Int {
+        val dm = resources.displayMetrics
+        val land = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val raw = dm.heightPixels * (if (land) 0.118f else 0.062f)
+        return raw.toInt().coerceIn(dp(40), dp(62))
+    }
+    private fun barH() = (keyH * 0.78f).toInt()
+
     init {
         orientation = VERTICAL
         setBackgroundColor(c(M.attr.colorSurfaceContainer))
-        setPadding(dp(4), dp(6), dp(4), dp(8))
-        val bar = LinearLayout(context).apply { orientation = HORIZONTAL }
+        keyH = computeKeyH()
         suggViews.forEach { t ->
             t.gravity = Gravity.CENTER; t.textSize = 15f; t.maxLines = 1
+            t.setPadding(dp(8), 0, dp(8), 0)
             t.setTextColor(c(M.attr.colorOnSecondaryContainer))
             t.background = shape(c(M.attr.colorSecondaryContainer), 20)
             t.setOnClickListener { l.onSuggestion(t.text.toString()) }
             t.visibility = INVISIBLE
-            bar.addView(t, LayoutParams(0, dp(40), 1f).apply { setMargins(dp(3), dp(2), dp(3), dp(4)) })
+            bar.addView(t, LayoutParams(0, barH(), 1f).apply { setMargins(dp(3), dp(2), dp(3), dp(4)) })
         }
         addView(bar); addView(keys)
+        applyPadding()
         render()
+
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            if (nav != navInset) { navInset = nav; applyPadding() }
+            insets
+        }
     }
+
+    private fun applyPadding() {
+        val side = if (width > maxContentW) (width - maxContentW) / 2 else dp(4)
+        setPadding(side, dp(6), side, maxOf(dp(8), navInset + dp(4)))
+    }
+
+    /** Hitung ulang ukuran bila layar/orientasi berubah. */
+    private fun refreshMetrics() {
+        val nh = computeKeyH()
+        if (nh != keyH) {
+            keyH = nh
+            suggViews.forEach { (it.layoutParams as LayoutParams).height = barH(); it.requestLayout() }
+            render()
+        }
+        applyPadding()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        super.onSizeChanged(w, h, ow, oh)
+        if (w != ow) post { refreshMetrics() }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        post { refreshMetrics() }
+    }
+
+    override fun onDetachedFromWindow() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDetachedFromWindow()
+    }
+
+    /** Tampilkan / sembunyikan bar saran (mis. disembunyikan untuk password & angka). */
+    fun setSuggestionsEnabled(on: Boolean) { bar.visibility = if (on) VISIBLE else GONE }
 
     fun setSuggestions(list: List<String>) =
         suggViews.forEachIndexed { i, t -> t.text = list.getOrNull(i) ?: ""; t.visibility = if (i < list.size) VISIBLE else INVISIBLE }
@@ -59,19 +124,22 @@ class SallyKeyboardView(ctx: Context, private val l: Listener) : LinearLayout(ct
     private fun ripple(color: Int, r: Int) = RippleDrawable(
         ColorStateList.valueOf(ColorUtils.setAlphaComponent(c(M.attr.colorOnSurface), 40)), shape(color, r), null)
 
-    // style: 0 biasa, 1 tonal, 2 primary
-    private fun key(label: String?, icon: Int?, w: Float, style: Int, tint: Boolean = false, onClick: () -> Unit): View {
+    // style: 0 biasa, 1 tonal, 2 primary. small = teks tombol fungsi (?123, Sally, dll)
+    private fun key(label: String?, icon: Int?, w: Float, style: Int, tint: Boolean = false, small: Boolean = false, onClick: () -> Unit): View {
         val bg = when (style) { 1 -> c(M.attr.colorSecondaryContainer); 2 -> c(M.attr.colorPrimary); else -> c(M.attr.colorSurfaceContainerHighest) }
         val fg = when (style) { 1 -> c(M.attr.colorOnSecondaryContainer); 2 -> c(M.attr.colorOnPrimary); else -> c(M.attr.colorOnSurface) }
         val v: View = if (icon != null) ImageView(context).apply {
             setImageResource(icon); setColorFilter(if (tint) c(M.attr.colorOnPrimary) else fg); scaleType = ImageView.ScaleType.CENTER
-        } else TextView(context).apply { text = label; setTextColor(fg); textSize = 20f; gravity = Gravity.CENTER }
+        } else TextView(context).apply {
+            text = label; setTextColor(fg); gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, keyH * (if (small) 0.29f else 0.38f))
+        }
         v.background = ripple(if (tint) c(M.attr.colorPrimary) else bg, 16)
         v.setOnClickListener { it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); onClick() }
-        v.layoutParams = LayoutParams(0, dp(52), w).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) }
+        v.layoutParams = LayoutParams(0, keyH, w).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) }
         return v
     }
-    private fun spacer(w: Float) = View(context).apply { layoutParams = LayoutParams(0, dp(52), w) }
+    private fun spacer(w: Float) = View(context).apply { layoutParams = LayoutParams(0, keyH, w) }
     private fun row(vararg v: View) = LinearLayout(context).apply { orientation = HORIZONTAL; v.forEach { addView(it) } }
 
     private fun render() {
@@ -98,10 +166,12 @@ class SallyKeyboardView(ctx: Context, private val l: Listener) : LinearLayout(ct
             }; true
         }
         keys.addView(row(*(listOf(shiftKey) + chars(src[2]) + listOf(del)).toTypedArray()))
+        val space = key("Sally", null, 5f, 0, small = true) { l.onText(" ") }
+        (space as TextView).setTextColor(c(M.attr.colorOnSurfaceVariant))
         keys.addView(row(
-            key(if (symbols) "ABC" else "?123", null, 1.5f, 1) { symbols = !symbols; render() },
+            key(if (symbols) "ABC" else "?123", null, 1.5f, 1, small = true) { symbols = !symbols; render() },
             key(",", null, 1f, 0) { l.onText(",") },
-            key(null, null, 5f, 0) { l.onText(" ") }.also { (it as TextView).text = "Sally" ; it.textSize = 14f; it.setTextColor(c(M.attr.colorOnSurfaceVariant)) },
+            space,
             key(".", null, 1f, 0) { l.onText(".") },
             key(null, R.drawable.ic_enter, 1.5f, 2) { l.onEnter() }
         ))
