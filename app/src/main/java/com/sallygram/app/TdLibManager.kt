@@ -218,7 +218,9 @@ class TdLibManager(context: Context) {
     ) {
         val activeClient = client ?: return
         activeClient.send(function) { result ->
-            onResult?.invoke(result)
+            @Suppress("UNCHECKED_CAST")
+            val typedResult = result as T
+            onResult?.invoke(typedResult)
             if (result is TdApi.Error) {
                 setState("Telegram: ${result.message}", currentStep())
             }

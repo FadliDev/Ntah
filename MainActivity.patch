@@ -1,0 +1,66 @@
+diff --git a/app/src/main/java/com/sallygram/app/MainActivity.kt b/app/src/main/java/com/sallygram/app/MainActivity.kt
+--- a/app/src/main/java/com/sallygram/app/MainActivity.kt
++++ b/app/src/main/java/com/sallygram/app/MainActivity.kt
+@@ -63,8 +63,9 @@
+ private data class Chat(
+     val name: String,
+     val message: String,
+     val time: String,
+     val initials: String,
+     val unread: Int = 0,
+-    val online: Boolean = false
++    val online: Boolean = false,
++    val telegramId: Long? = null
+ )
+@@ -123,8 +124,23 @@ private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean, tdLibManager: TdLibManager) {
+     var showInfo by remember { mutableStateOf(false) }
+     var showLogin by remember { mutableStateOf(false) }
+     var loginInput by remember { mutableStateOf("") }
+     val tdState by tdLibManager.state.collectAsState()
+-    val filtered = demoChats.filter {
++    val telegramChats by tdLibManager.chats.collectAsState()
++    val sourceChats = if (tdState.isReady) {
++        telegramChats.map { chat ->
++            Chat(
++                name = chat.title,
++                message = chat.lastMessage,
++                time = chat.date.takeIf { it > 0 }?.let { formatChatTime(it) }.orEmpty(),
++                initials = chat.title.firstOrNull()?.uppercaseChar()?.toString() ?: "T",
++                unread = chat.unreadCount,
++                telegramId = chat.id
++            )
++        }
++    } else {
++        demoChats
++    }
++    val filtered = sourceChats.filter {
+         it.name.contains(query, ignoreCase = true) ||
+             it.message.contains(query, ignoreCase = true)
+     }
+@@ -253,8 +268,16 @@ private fun ChatHome(onToggleTheme: () -> Unit, dark: Boolean, tdLibManager: TdLibManager) {
+                     if (filtered.isEmpty()) {
+                         item {
+                             Box(
+                                 modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                 contentAlignment = Alignment.Center
+-                            ) { Text("Chat tidak ditemukan") }
++                            ) {
++                                Text(
++                                    when {
++                                        query.isNotBlank() -> "Chat tidak ditemukan"
++                                        tdState.isReady -> "Belum ada percakapan"
++                                        else -> "Chat tidak ditemukan"
++                                    }
++                                )
++                            }
+                         }
+                     }
+@@ -449,3 +472,8 @@ private fun avatarColor(seed: String): Color {
+     )
+     return colors[(seed.hashCode().and(Int.MAX_VALUE)) % colors.size]
+ }
++
++private fun formatChatTime(unixSeconds: Int): String {
++    return java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
++        .format(java.util.Date(unixSeconds * 1000L))
++}
