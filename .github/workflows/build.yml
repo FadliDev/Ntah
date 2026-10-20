@@ -1,55 +1,82 @@
-name: Build Sallygram APK
+name: Sallygram Android Build
 
 on:
   push:
-    branches: [ "main", "master" ]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: sallygram-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build TDLib and APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
     env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
       TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+
     steps:
       - name: Checkout Sallygram
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
+
+      # This action installs Android SDK command-line tools and adds sdkmanager to PATH.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v sdkmanager
+          sdkmanager --version
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install \
+            'platform-tools' \
+            'platforms;android-35' \
+            'build-tools;35.0.0'
+
+      - name: Install native build dependencies
+        shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y git cmake ninja-build gperf php-cli perl
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          for d in "$ANDROID_HOME"/cmdline-tools/*/bin; do
-            if [ -d "$d" ]; then echo "$d" >> "$GITHUB_PATH"; fi
-          done
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          sudo apt-get install -y git cmake ninja-build gperf php-cli perl python3
 
-      - name: Build TDLib for Android (official upstream scripts)
-        run: ./scripts/prepare-tdlib.sh
+      - name: Verify project structure
+        shell: bash
+        run: |
+          set -e
+          test -f ./gradlew || { echo '::error::gradlew is missing from repository root'; exit 1; }
+          test -f ./app/build.gradle.kts || { echo '::error::app/build.gradle.kts is missing'; exit 1; }
+          test -f ./scripts/prepare-tdlib.sh || { echo '::error::scripts/prepare-tdlib.sh is missing'; exit 1; }
+
+      - name: Build TDLib for Android
+        shell: bash
+        run: |
+          chmod +x ./scripts/prepare-tdlib.sh
+          ./scripts/prepare-tdlib.sh
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
+        shell: bash
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: Sallygram-debug
