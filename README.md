@@ -1,23 +1,24 @@
-# Sallygram performance + persistent signing patch
+# Blokku (nama kerja)
 
-Contains:
-- `.github/workflows/build.yml`: copies the persistent keystore to `$HOME/.android/debug.keystore` before `assembleDebug`.
-- `signing/sallygram-debug.keystore`: stable debug signing identity for this private repository.
-- `app/src/main/java/com/sallygram/app/TdLibManager.kt`: initially loads 30 chats rather than 100 to reduce initial loading work.
+Lapisan UI baru (Jetpack Compose + Material 3) untuk fork ZalithLauncher, sesuai PRD:
+arm64-v8a, target Snapdragon 710 / Adreno 616 / RAM 6 GB, preset Hemat/Seimbang/Eksperimen.
 
-## Apply
-Extract the ZIP into the repository root, replacing the listed files. Keep this repository private and do not share the keystore or this ZIP publicly.
+## Status
+- UI jalan sendiri dengan `FakeLauncherEngine` (data palsu): onboarding, Beranda, Versi, Jelajah, Pengaturan, dialog pra-cek memori.
+- Logika murni sudah ada + unit test: `JavaPicker` (Java 8/17/21 otomatis), `RamPolicy` (1024–2048 MB), `Preset`.
+- **Belum** tersambung ke inti Zalith (native, JRE, renderer, login). Itu langkah integrasi di bawah.
+- Belum pernah dikompilasi (tidak ada Android SDK/jaringan di sini). Build pertama lewat GitHub Actions.
 
-Then run:
-```bash
-git add .github/workflows/build.yml signing/sallygram-debug.keystore app/src/main/java/com/sallygram/app/TdLibManager.kt
-git commit -m "Speed up initial chat loading and persist APK signing key"
-git push origin main
-```
+## Build
+GitHub Actions: push repo, workflow `Build APK` menghasilkan artifact `Blokku-debug`.
+Lokal/Termux: `gradle :app:assembleDebug` (butuh JDK 17 + Android SDK 35).
 
-## Important signing note
-The keystore uses alias `androiddebugkey` and password `android` for Android's debug signing configuration. This is intended for personal sideloaded debug APKs. Do not use this debug key for Google Play production releases.
-
-Your already-installed APK may have been signed with a different ephemeral runner key. The first install using this new key may require uninstalling the old APK first (which deletes local app data); after that, future builds using this same key should install as updates as long as `applicationId` remains unchanged.
-
-The keystore is included because the repository is private as requested, but anyone who obtains this file can sign builds as this app. Keep repository access restricted and retain a secure backup.
+## Integrasi dengan ZalithLauncher (GPL-3.0)
+1. Fork https://github.com/ZalithLauncher/ZalithLauncher (repo sudah archived; Fase 0 PRD membandingkan dengan ZalithLauncher2).
+2. Pindahkan `jni/`, `jniLibs/arm64-v8a`, `assets/components`, renderer, `JREUtils`, `MultiRTUtils`,
+   `MinecraftGLSurface`, `MainActivity` (layar game) ke modul `:engine`; build dengan `-Darch=arm64`.
+3. Di `:core`, tulis `ZalithEngine : LauncherEngine` (lihat komentar di `LauncherEngine.kt`) yang membungkus
+   `feature/version`, `MinecraftDownloader`, `feature/accounts`, `feature/download`.
+4. Di `AppViewModel`, ganti `FakeLauncherEngine()` dengan `ZalithEngine`.
+5. Naikkan compileSdk/targetSdk ke 35, R8 tetap mati, pertahankan `AllSettings` dulu.
+6. Ganti nama, ikon, package, dan pertahankan notice GPL-3.0 + halaman Tentang (jangan pakai nama "ZalithLauncher"/"ZL").

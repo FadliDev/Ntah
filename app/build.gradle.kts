@@ -5,59 +5,44 @@ plugins {
 }
 
 android {
-    namespace = "com.sallygram.app"
+    namespace = "com.sally.blokku"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sallygram.app"
-        minSdk = 23
+        applicationId = "com.sally.blokku"
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        // arm64 saja (target Snapdragon 710 / Adreno 616)
+        ndk { abiFilters += "arm64-v8a" }
     }
 
-    buildFeatures {
-        compose = true
-        buildConfig = true
+    buildTypes {
+        release {
+            // R8 sengaja mati: minify merusak nama kelas java.awt di core Zalith (lihat PRD)
+            isMinifyEnabled = false
+        }
     }
-
-    val telegramApiId = (providers.gradleProperty("telegramApiId")
-        .orElse(providers.environmentVariable("TELEGRAM_API_ID")).orElse("0").get())
-        .toIntOrNull() ?: 0
-    val telegramApiHash = providers.gradleProperty("telegramApiHash")
-        .orElse(providers.environmentVariable("TELEGRAM_API_HASH")).orElse("").get()
-        .replace("\\", "\\\\").replace("\"", "\\\"")
-    defaultConfig {
-        buildConfigField("int", "TELEGRAM_API_ID", telegramApiId.toString())
-        buildConfigField("String", "TELEGRAM_API_HASH", "\"$telegramApiHash\"")
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { compose = true }
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(composeBom)
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.runtime:runtime")
-    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    testImplementation("junit:junit:4.13.2")
 }
