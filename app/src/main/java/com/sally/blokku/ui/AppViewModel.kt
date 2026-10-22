@@ -17,14 +17,12 @@ data class UiState(
     val accountName: String? = null,
     val advanced: Boolean = false,
     val versions: List<MinecraftVersion> = emptyList(),
-    val installing: Map<String, Float> = emptyMap(),
     val preflight: Preflight? = null,
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("blokku", Context.MODE_PRIVATE)
-    // TODO(zalith): ganti dengan ZalithEngine dari modul :core
-    private val engine: LauncherEngine = FakeLauncherEngine()
+    val engine: LauncherEngine = ZalithEngine()
 
     private val _state = MutableStateFlow(
         UiState(
@@ -32,26 +30,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             preset = runCatching { Preset.valueOf(prefs.getString("preset", null)!!) }
                 .getOrDefault(Preset.SEIMBANG),
             ramMb = prefs.getInt("ram", Preset.SEIMBANG.ramMb),
-            selectedId = prefs.getString("sel", null),
-            accountName = prefs.getString("acc", null),
             advanced = prefs.getBoolean("adv", false),
         )
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    init {
-        viewModelScope.launch { _state.update { it.copy(versions = engine.fetchVersions()) } }
+    init { refresh() }
+
+    /** Dipanggil saat layar kembali aktif (mis. setelah memasang versi di launcher klasik). */
+    fun refresh() {
+        viewModelScope.launch {
+            val versions = engine.loadVersions()
+            _state.update {
+                it.copy(
+                    versions = versions,
+                    selectedId = engine.currentVersionId(),
+                    accountName = engine.currentAccountName(),
+                )
+            }
+        }
     }
 
     fun setPreset(p: Preset) {
         _state.update { it.copy(preset = p, ramMb = p.ramMb) }
         prefs.edit().putString("preset", p.name).putInt("ram", p.ramMb).apply()
+        engine.applyPreset(p, p.ramMb)
     }
 
     fun setRam(mb: Int) {
         val v = RamPolicy.snap(mb)
         _state.update { it.copy(ramMb = v) }
         prefs.edit().putInt("ram", v).apply()
+        engine.applyPreset(_state.value.preset, v)
     }
 
     fun setAdvanced(on: Boolean) {
@@ -60,48 +70,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setAccount(name: String) {
-        _state.update { it.copy(accountName = name.trim()) }
-        prefs.edit().putString("acc", name.trim()).apply()
+        val n = name.trim()
+        if (n.isEmpty()) return
+        engine.createLocalAccount(n)
+        _state.update { it.copy(accountName = n) }
     }
 
     fun finishOnboarding() {
         _state.update { it.copy(onboardingDone = true) }
         prefs.edit().putBoolean("onb", true).apply()
+        engine.applyPreset(_state.value.preset, _state.value.ramMb)
     }
 
     fun select(id: String) {
+        engine.selectVersion(id)
         _state.update { it.copy(selectedId = id) }
-        prefs.edit().putString("sel", id).apply()
     }
 
-    fun install(id: String) {
-        if (id in _state.value.installing) return
-        viewModelScope.launch {
-            engine.install(id).collect { p ->
-                _state.update { it.copy(installing = it.installing + (id to p)) }
-            }
-            _state.update { s ->
-                s.copy(
-                    installing = s.installing - id,
-                    versions = s.versions.map { if (it.id == id) it.copy(installed = true) else it },
-                    selectedId = s.selectedId ?: id,
-                )
-            }
-        }
-    }
-
-    fun play() {
+    fun play(context: Context) {
         val s = _state.value
-        val id = s.selectedId
-        val v = s.versions.firstOrNull { it.id == id }
-        if (id == null || v == null) { _state.update { it.copy(preflight = Preflight.NotInstalled) }; return }
-        val req = LaunchRequest(id, s.preset, s.ramMb, s.accountName)
-        viewModelScope.launch {
-            val r = engine.preflight(req, availMb(), v.installed)
-            if (r is Preflight.Ok) engine.launch(req) else _state.update { it.copy(preflight = r) }
-        }
+        val id = s.selectedId ?: engine.currentVersionId()
+        if (id == null) { _state.update { it.copy(preflight = Preflight.NotInstalled) }; return }
+        val req = LaunchRequest(id, s.preset, s.ramMb)
+        val r = engine.preflight(req, availMb())
+        if (r is Preflight.Ok) engine.launch(context, req) else _state.update { it.copy(preflight = r) }
     }
 
+    fun openClassic(context: Context) = engine.openClassic(context)
     fun applySuggestedRam(mb: Int) { setRam(mb); dismissPreflight() }
     fun dismissPreflight() = _state.update { it.copy(preflight = null) }
 

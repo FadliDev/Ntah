@@ -3,7 +3,6 @@ package com.sally.blokku.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -13,7 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.sally.blokku.core.*
 import kotlinx.coroutines.launch
@@ -30,12 +29,9 @@ fun HomeScreen(s: UiState, vm: AppViewModel) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(v?.id ?: "Belum ada versi", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    if (v != null) "Minecraft ${v.id}" else "Belum ada versi",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    if (v != null) "${v.loader ?: "Vanilla"} · ${s.ramMb} MB · Java ${JavaPicker.forVersion(v.id)}"
+                    if (v != null) "${v.info} · ${s.ramMb} MB · Java ${JavaPicker.forVersion(v.mcVersion)}"
                     else "Buka tab Versi untuk memasang",
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -48,10 +44,7 @@ fun HomeScreen(s: UiState, vm: AppViewModel) {
                     )
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         Preset.entries.forEach { p ->
-                            DropdownMenuItem(
-                                text = { Text(p.label) },
-                                onClick = { vm.setPreset(p); menu = false },
-                            )
+                            DropdownMenuItem(text = { Text(p.label) }, onClick = { vm.setPreset(p); menu = false })
                         }
                     }
                 }
@@ -63,7 +56,7 @@ fun HomeScreen(s: UiState, vm: AppViewModel) {
                     Icon(Icons.Filled.Warning, null)
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        "Mode Eksperimen bisa membuat game crash. Otomatis kembali ke Seimbang jika gagal start dua kali.",
+                        "Mode Eksperimen (Zink) bisa membuat game crash. Kalau gagal, pilih Seimbang.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -73,55 +66,30 @@ fun HomeScreen(s: UiState, vm: AppViewModel) {
 }
 
 // ---------- Versi ----------
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VersionsScreen(s: UiState, vm: AppViewModel) {
-    var filter by remember { mutableIntStateOf(0) }
-    val labels = listOf("Terpasang", "Rilis", "Snapshot")
-    val list = s.versions.filter {
-        when (filter) {
-            0 -> it.installed
-            1 -> it.type == VersionType.RELEASE
-            else -> it.type == VersionType.SNAPSHOT
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { vm.openClassic(context) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Icon(Icons.Filled.Add, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Pasang versi baru")
         }
-    }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            labels.forEachIndexed { i, l ->
-                SegmentedButton(
-                    selected = filter == i, onClick = { filter = i },
-                    shape = SegmentedButtonDefaults.itemShape(i, labels.size),
-                ) { Text(l) }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        if (list.isEmpty()) {
-            Text("Belum ada versi terpasang. Buka tab Rilis lalu ketuk Pasang.",
-                Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+        if (s.versions.isEmpty()) {
+            Text(
+                "Belum ada versi terpasang. Ketuk Pasang versi baru, lalu kembali ke sini.",
+                Modifier.padding(vertical = 16.dp), style = MaterialTheme.typography.bodyMedium,
+            )
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(list, key = { it.id }) { v ->
-                val progress = s.installing[v.id]
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(v.id, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    if (v.type == VersionType.RELEASE) "Rilis" else "Snapshot",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            when {
-                                v.installed -> RadioButton(selected = s.selectedId == v.id, onClick = { vm.select(v.id) })
-                                progress != null -> Text("${(progress * 100).toInt()}%")
-                                else -> FilledTonalButton(onClick = { vm.install(v.id) }) { Text("Pasang") }
-                            }
+            items(s.versions, key = { it.id }) { v ->
+                ElevatedCard(Modifier.fillMaxWidth(), onClick = { vm.select(v.id) }) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(v.id, style = MaterialTheme.typography.titleMedium)
+                            Text(v.info, style = MaterialTheme.typography.bodyMedium)
                         }
-                        if (progress != null) {
-                            Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-                        }
+                        RadioButton(selected = s.selectedId == v.id, onClick = { vm.select(v.id) })
                     }
                 }
             }
@@ -131,29 +99,18 @@ fun VersionsScreen(s: UiState, vm: AppViewModel) {
 
 // ---------- Jelajah ----------
 @Composable
-fun ExploreScreen() {
-    var query by remember { mutableStateOf("") }
-    var chip by remember { mutableIntStateOf(0) }
-    val chips = listOf("Mod", "Modpack", "Resource", "Shader", "World")
+fun ExploreScreen(vm: AppViewModel) {
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            value = query, onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(), singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text("Cari di Modrinth") },
-            shape = MaterialTheme.shapes.extraLarge,
+        Text("Mod, modpack, resource pack, shader, dan world", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Pencarian dan unduhan Modrinth/CurseForge masih memakai launcher klasik. Layar Jelajah baru menyusul.",
+            style = MaterialTheme.typography.bodyMedium,
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(chips.size) { i ->
-                FilterChip(selected = chip == i, onClick = { chip = i }, label = { Text(chips[i]) })
-            }
-        }
-        // TODO(zalith): hubungkan ke feature/download (Modrinth utama, CurseForge opsional)
-        Card(Modifier.fillMaxWidth()) {
-            Text(
-                "Hasil pencarian ${chips[chip].lowercase()} akan muncul di sini setelah engine dihubungkan.",
-                Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium,
-            )
+        FilledTonalButton(onClick = { vm.openClassic(context) }, modifier = Modifier.heightIn(min = 48.dp)) {
+            Icon(Icons.Filled.Search, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Buka di launcher klasik")
         }
     }
 }
@@ -161,6 +118,7 @@ fun ExploreScreen() {
 // ---------- Pengaturan ----------
 @Composable
 fun SettingsScreen(s: UiState, vm: AppViewModel) {
+    val context = LocalContext.current
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Kinerja", style = MaterialTheme.typography.titleMedium) }
         item {
@@ -185,10 +143,11 @@ fun SettingsScreen(s: UiState, vm: AppViewModel) {
         }
         item { Text("Akun", style = MaterialTheme.typography.titleMedium) }
         item {
-            var name by remember(s.accountName) { mutableStateOf(s.accountName ?: "") }
+            var name by remember(s.accountName) { mutableStateOf("") }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("Nama akun lokal") },
+                    Text("Akun aktif: ${s.accountName ?: "-"}", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(name, { name = it }, label = { Text("Tambah akun lokal") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                     Button(onClick = { vm.setAccount(name) }, enabled = name.isNotBlank()) { Text("Simpan") }
                 }
@@ -197,16 +156,17 @@ fun SettingsScreen(s: UiState, vm: AppViewModel) {
         item { Text("Lanjutan", style = MaterialTheme.typography.titleMedium) }
         item {
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Mode Lanjutan", Modifier.weight(1f))
                         Switch(checked = s.advanced, onCheckedChange = vm::setAdvanced)
                     }
                     if (s.advanced) {
-                        Spacer(Modifier.height(8.dp))
                         Text("Mesin grafis: ${s.preset.renderer}", style = MaterialTheme.typography.bodyMedium)
                         Text("Resolusi render: ${s.preset.resolutionPct}%", style = MaterialTheme.typography.bodyMedium)
-                        // TODO(zalith): file manager, log, runtime (AllSettings, FilesFragment)
+                        OutlinedButton(onClick = { vm.openClassic(context) }) {
+                            Text("Launcher klasik (file manager, log, kontrol)")
+                        }
                     }
                 }
             }
@@ -230,9 +190,11 @@ fun OnboardingScreen(s: UiState, vm: AppViewModel) {
                     when (page) {
                         0 -> {
                             Text("Selamat datang", style = MaterialTheme.typography.headlineSmall)
-                            Text("Blokku butuh izin penyimpanan dan notifikasi untuk mengunduh dan menjalankan game. " +
-                                "Izin akan diminta saat dibutuhkan.", style = MaterialTheme.typography.bodyMedium)
-                            // TODO(zalith): minta izin lewat ActivityResultContracts.RequestPermission
+                            Text(
+                                "Launcher akan menyiapkan komponen game saat pertama dibuka. " +
+                                    "Izin penyimpanan diminta otomatis kalau dibutuhkan.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
                         1 -> {
                             Text("Pilih kinerja", style = MaterialTheme.typography.headlineSmall)
@@ -249,10 +211,16 @@ fun OnboardingScreen(s: UiState, vm: AppViewModel) {
                         }
                         else -> {
                             Text("Buat akun", style = MaterialTheme.typography.headlineSmall)
-                            OutlinedTextField(name, { name = it }, label = { Text("Nama pemain") },
-                                singleLine = true, modifier = Modifier.fillMaxWidth())
-                            Text("Login Microsoft menyusul. Beli game resminya untuk mendukung Mojang.",
-                                style = MaterialTheme.typography.bodyMedium)
+                            if (s.accountName != null) {
+                                Text("Akun terdeteksi: ${s.accountName}", style = MaterialTheme.typography.bodyMedium)
+                            } else {
+                                OutlinedTextField(name, { name = it }, label = { Text("Nama pemain") },
+                                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                            }
+                            Text(
+                                "Login Microsoft ada di ikon akun setelah ini. Beli game resminya untuk mendukung Mojang.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
                     }
                 }
@@ -260,10 +228,10 @@ fun OnboardingScreen(s: UiState, vm: AppViewModel) {
             val last = pager.currentPage == 2
             Button(
                 onClick = {
-                    if (last) { vm.setAccount(name); vm.finishOnboarding() }
+                    if (last) { if (s.accountName == null) vm.setAccount(name); vm.finishOnboarding() }
                     else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                 },
-                enabled = !last || name.isNotBlank(),
+                enabled = !last || s.accountName != null || name.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text(if (last) "Selesai" else "Lanjut") }
         }

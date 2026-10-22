@@ -10,11 +10,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sally.blokku.R
+import com.movtery.zalithlauncher.InfoDistributor
 import com.sally.blokku.core.Preflight
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -28,6 +31,15 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun BlokkuApp(vm: AppViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // Segarkan daftar versi/akun saat kembali dari launcher klasik
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) vm.refresh() }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
 
     if (!s.onboardingDone) {
         OnboardingScreen(s, vm)
@@ -41,7 +53,7 @@ fun BlokkuApp(vm: AppViewModel = viewModel()) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
+                title = { Text(InfoDistributor.APP_NAME) },
                 actions = {
                     IconButton(onClick = { accountSheet = true }) {
                         Icon(Icons.Filled.Person, contentDescription = "Akun")
@@ -61,7 +73,7 @@ fun BlokkuApp(vm: AppViewModel = viewModel()) {
         },
         floatingActionButton = {
             if (tab == Tab.Beranda) ExtendedFloatingActionButton(
-                onClick = vm::play,
+                onClick = { vm.play(context) },
                 icon = { Icon(Icons.Filled.PlayArrow, null) },
                 text = { Text("Main") },
             )
@@ -80,7 +92,7 @@ fun BlokkuApp(vm: AppViewModel = viewModel()) {
                 when (tab) {
                     Tab.Beranda -> HomeScreen(s, vm)
                     Tab.Versi -> VersionsScreen(s, vm)
-                    Tab.Jelajah -> ExploreScreen()
+                    Tab.Jelajah -> ExploreScreen(vm)
                     Tab.Atur -> SettingsScreen(s, vm)
                 }
             }
@@ -93,8 +105,12 @@ fun BlokkuApp(vm: AppViewModel = viewModel()) {
             Spacer(Modifier.height(8.dp))
             Text(s.accountName ?: "Belum ada akun", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(16.dp))
-            // TODO(zalith): daftar akun dari feature/accounts + tombol login Microsoft
-            OutlinedButton(onClick = { accountSheet = false }) { Text("Tutup") }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledTonalButton(onClick = { accountSheet = false; vm.openClassic(context) }) {
+                    Text("Kelola / Microsoft")
+                }
+                OutlinedButton(onClick = { accountSheet = false }) { Text("Tutup") }
+            }
         }
     }
 
@@ -104,8 +120,8 @@ fun BlokkuApp(vm: AppViewModel = viewModel()) {
 @Composable
 private fun PreflightDialog(p: Preflight, vm: AppViewModel) {
     val (title, body) = when (p) {
-        Preflight.NotInstalled -> "Versi belum terpasang" to "Pasang versi Minecraft dulu di tab Versi."
-        Preflight.NoAccount -> "Belum ada akun" to "Buat akun lokal atau login dulu lewat ikon akun."
+        Preflight.NotInstalled -> "Belum ada versi" to "Pasang versi Minecraft dulu lewat tab Versi."
+        Preflight.NoAccount -> "Belum ada akun" to "Buat akun lokal di tab Atur, atau login Microsoft lewat ikon akun."
         is Preflight.LowMemory ->
             "Memori tidak cukup" to "Memori kosong ±${p.availMb} MB. Turunkan alokasi game ke ${p.suggestMb} MB?"
         Preflight.Ok -> return

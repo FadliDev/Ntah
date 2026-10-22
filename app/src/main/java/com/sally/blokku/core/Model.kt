@@ -1,20 +1,13 @@
 package com.sally.blokku.core
 
-enum class VersionType { RELEASE, SNAPSHOT }
-
+/** Versi Minecraft yang sudah terpasang (dari VersionsManager Zalith). */
 data class MinecraftVersion(
-    val id: String,
-    val type: VersionType,
-    val installed: Boolean = false,
-    val loader: String? = null,
+    val id: String,        // nama folder versi
+    val mcVersion: String, // versi Minecraft murni, dipakai untuk memilih Java
+    val info: String,      // mis. "1.20.1, Fabric - 0.15"
 )
 
-data class LaunchRequest(
-    val versionId: String,
-    val preset: Preset,
-    val ramMb: Int,
-    val accountName: String?,
-)
+data class LaunchRequest(val versionId: String, val preset: Preset, val ramMb: Int)
 
 sealed interface Preflight {
     data object Ok : Preflight
